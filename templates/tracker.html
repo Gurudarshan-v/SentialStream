@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisX Sentinel — Secure Beacon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 flex items-center justify-center h-screen m-0">
+    <div class="bg-slate-900 border border-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div class="flex items-center space-x-3 mb-6">
+            <div class="h-3 w-3 bg-emerald-500 rounded-full animate-pulse"></div>
+            <h2 class="text-xl font-bold tracking-wide text-sky-400">AegisX Sentinel Beacon</h2>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Device Call Sign</label>
+                <input type="text" id="deviceId" value="Alpha-Unit-01" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Auth Token</label>
+                <input type="password" id="authToken" value="aegisx-secure-auth-2026" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500">
+            </div>
+
+            <button id="startBtn" onclick="startTracking()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-semibold py-2.5 rounded-lg transition text-sm">
+                Initialize Secure Stream
+            </button>
+            <button id="stopBtn" onclick="stopTracking()" class="w-full bg-rose-600 hover:bg-rose-500 font-semibold py-2.5 rounded-lg transition text-sm hidden">
+                Terminate Stream
+            </button>
+        </div>
+
+        <div id="statusBox" class="mt-6 bg-slate-950 border-l-4 border-sky-500 p-3 rounded text-xs font-mono text-slate-400">
+            Status: Standby (Awaiting authorization handshake)
+        </div>
+    </div>
+
+    <script>
+        let watchId = null;
+
+        function startTracking() {
+            const deviceId = document.getElementById("deviceId").value.trim();
+            const token = document.getElementById("authToken").value.trim();
+            if (!deviceId || !token) return alert("Device ID and Auth Token are required.");
+
+            if (!("geolocation" in navigator)) {
+                document.getElementById("statusBox").innerText = "Error: Geolocation API unavailable.";
+                return;
+            }
+
+            document.getElementById("statusBox").innerText = "Handshaking with satellite/GPS module...";
+
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const payload = {
+                        device_id: deviceId,
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                        speed: position.coords.speed || 0.0
+                    };
+
+                    fetch("/api/update_location", {
+                        method: "POST",
+                        headers: { 
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify(payload)
+                    }).then(res => {
+                        if (!res.ok) throw new Error("Authentication failed");
+                        document.getElementById("statusBox").innerHTML = `
+                            <span class="text-emerald-400 font-bold">● Live Transmission Active</span><br>
+                            Lat/Lon: ${payload.latitude.toFixed(4)}, ${payload.longitude.toFixed(4)}<br>
+                            Precision: ±${Math.round(payload.accuracy)}m | Speed: ${(payload.speed * 3.6).toFixed(1)} km/h
+                        `;
+                    }).catch(err => {
+                        document.getElementById("statusBox").innerText = `Error: ${err.message}`;
+                    });
+
+                    document.getElementById("startBtn").classList.add("hidden");
+                    document.getElementById("stopBtn").classList.remove("hidden");
+                },
+                (error) => {
+                    document.getElementById("statusBox").innerText = `GPS Error: ${error.message}`;
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        function stopTracking() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            const deviceId = document.getElementById("deviceId").value.trim();
+            const token = document.getElementById("authToken").value.trim();
+
+            fetch("/api/stop_sharing", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ device_id: deviceId })
+            });
+
+            document.getElementById("statusBox").innerText = "Status: Stream terminated. Link closed.";
+            document.getElementById("startBtn").classList.remove("hidden");
+            document.getElementById("stopBtn").classList.add("hidden");
+        }
+    </script>
+</body>
+</html>
