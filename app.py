@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
+import os
 from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
-# Security configuration (in production, use environment variables)
+# Security configuration
 API_SECRET_TOKEN = "aegisx-secure-auth-2026"
 
 # In-memory advanced telemetry store
@@ -98,4 +99,5 @@ def stop_sharing():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
